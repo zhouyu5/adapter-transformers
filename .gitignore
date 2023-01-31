@@ -13,6 +13,8 @@ tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/
+wandb/
+tmp/
 
 # Distribution / packaging
 .Python

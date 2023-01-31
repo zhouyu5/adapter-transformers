@@ -139,6 +139,9 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    pt_column_name: Optional[str] = field(
+        default='text', metadata={"help": "The name of the column to use for pre-training (via the datasets library)."}
+    )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
         default=None,
@@ -448,7 +451,7 @@ def main():
         column_names = raw_datasets["train"].column_names
     else:
         column_names = raw_datasets["validation"].column_names
-    text_column_name = "text" if "text" in column_names else column_names[0]
+    text_column_name = data_args.pt_column_name
 
     if data_args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
