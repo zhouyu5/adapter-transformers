@@ -17,6 +17,7 @@ from transformers import (
     PfeifferInvConfig,
 )
 from transformers.adapters import BatchSplit, Fuse
+from transformers.adapters.heads.language_modeling import CausalLMHead
 from transformers.testing_utils import require_torch, torch_device
 
 from .base import AdapterMethodBaseTestMixin, create_twin_models
@@ -76,6 +77,7 @@ class BottleneckAdapterTestMixin(AdapterMethodBaseTestMixin):
                 adapter_output = model(**input_data)
                 # make sure the output is different without invertible adapter
                 del model.invertible_adapters[name]
+                self.assertFalse(name in model.invertible_adapters)
                 adapter_output_no_inv = model(**input_data)
                 self.assertEqual(len(adapter_output), len(adapter_output_no_inv))
                 self.assertFalse(torch.equal(adapter_output[0], adapter_output_no_inv[0]))
@@ -83,10 +85,17 @@ class BottleneckAdapterTestMixin(AdapterMethodBaseTestMixin):
     def test_get_adapter(self):
         model = self.get_model()
         model.eval()
+        n_layers = len(list(model.iter_layers()))
+        if model.config.is_encoder_decoder:
+            n_prefix_layers = 3
+        elif model.config.is_composition:
+            n_prefix_layers = 2
+        else:
+            n_prefix_layers = 1
 
-        for adapter_config, _ in self.adapter_configs_to_test:
+        for adapter_config, n_expected in [(HoulsbyConfig(), n_layers * 2), (MAMConfig(), n_layers + n_prefix_layers)]:
             with self.subTest(model_class=model.__class__.__name__, config=adapter_config.__class__.__name__):
-                self.run_get_test(model, adapter_config)
+                self.run_get_test(model, adapter_config, n_expected)
 
     def test_add_adapter_multiple_reduction_factors(self):
         model = self.get_model()
@@ -244,9 +253,7 @@ class BottleneckAdapterTestMixin(AdapterMethodBaseTestMixin):
             self.skipTest("No causal lm class.")
 
         static_model = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[self.config_class](self.config())
-        flex_model = AutoAdapterModel.from_pretrained(
-            None, config=self.config(), state_dict=static_model.state_dict()
-        )
+        flex_model = AutoAdapterModel.from_pretrained(None, config=self.config(), state_dict=static_model.state_dict())
         static_model.add_adapter("dummy")
         static_model.set_active_adapters("dummy")
         static_model.eval()
@@ -324,19 +331,28 @@ class BottleneckAdapterTestMixin(AdapterMethodBaseTestMixin):
         model.base_model.get_fusion_regularization_loss = patched_fusion_reg_loss
 
         self.trainings_run(model)
+        self.assertTrue(regularization_called)
+        def has_tied_embeddings(k):
+            tied_embeddings = hasattr(model.config, "tie_word_embeddings") and model.config.tie_word_embeddings 
+            is_tied_layer = isinstance(model.heads["head"], CausalLMHead) and 'heads.{}.{}.weight'.format("head", len(model.heads["head"]._modules)-1) in k
+            return tied_embeddings and is_tied_layer
 
+        # check that the adapters have changed, but the base model has not
+        adapters_with_change, base_with_change = False, False
         for ((k1, v1), (k2, v2)) in zip(state_dict_pre.items(), model.state_dict().items()):
             if (
-                "adapter_fusion_layer" in k1
+                ("adapter_fusion_layer" in k1
                 or "classifier" in k1
                 or "classification_head" in k1
                 or "score" in k1
-                or "heads" in k1
+                or "head" in k1)
+                and not has_tied_embeddings(k1)
             ):
-                self.assertFalse(torch.equal(v1, v2), k1)
+                adapters_with_change |= not torch.equal(v1, v2)
             else:
-                self.assertTrue(torch.equal(v1, v2), k1)
-        self.assertTrue(regularization_called)
+                base_with_change |= not torch.equal(v1, v2)
+        self.assertTrue(adapters_with_change)
+        self.assertFalse(base_with_change)
 
     def test_batch_split_training(self):
         if self.config_class not in ADAPTER_MODEL_MAPPING:
@@ -365,17 +381,12 @@ class BottleneckAdapterTestMixin(AdapterMethodBaseTestMixin):
 
         self.trainings_run(model)
 
-        self.assertFalse(
-            all(
-                torch.equal(v1, v2)
-                for ((k1, v1), (k2, v2)) in zip(state_dict_pre.items(), model.state_dict().items())
-                if "mrpc" in k1
-            )
-        )
-        self.assertTrue(
-            all(
-                torch.equal(v1, v2)
-                for ((k1, v1), (k2, v2)) in zip(state_dict_pre.items(), model.state_dict().items())
-                if "mrpc" not in k1
-            )
-        )
+        # check that the adapters have changed, but the base model has not
+        adapters_with_change, base_with_change = False, False
+        for ((k1, v1), (k2, v2)) in zip(state_dict_pre.items(), model.state_dict().items()):
+            if "mrpc" in k1:
+                adapters_with_change |= not torch.equal(v1, v2)
+            else:
+                base_with_change |= not torch.equal(v1, v2)
+        self.assertTrue(adapters_with_change)
+        self.assertFalse(base_with_change)

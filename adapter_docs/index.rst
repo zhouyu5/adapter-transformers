@@ -23,8 +23,15 @@ Currently, we support the PyTorch versions of all models as listed on the `Model
 
    installation
    quickstart
-   overview
    training
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Adapter Methods
+
+   overview
+   methods
+   method_combinations
 
 .. toctree::
    :maxdepth: 2
@@ -49,10 +56,13 @@ Currently, we support the PyTorch versions of all models as listed on the `Model
    :caption: Supported Models
 
    model_overview
+   classes/models/albert
    classes/models/auto
    classes/models/bart
    classes/models/beit
    classes/models/bert
+   classes/models/bert-generation
+   classes/models/clip
    classes/models/deberta
    classes/models/deberta_v2
    classes/models/distilbert
@@ -74,6 +84,7 @@ Currently, we support the PyTorch versions of all models as listed on the `Model
    classes/adapter_modules
    classes/adapter_layer
    classes/model_mixins
+   classes/adapter_training
    classes/adapter_utils
 
 .. toctree::
