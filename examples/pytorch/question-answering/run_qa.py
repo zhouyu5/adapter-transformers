@@ -48,6 +48,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -665,6 +666,10 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        # with profile(activities=[
+        #     ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+        #     train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics

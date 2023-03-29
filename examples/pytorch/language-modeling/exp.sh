@@ -1,6 +1,9 @@
 pt_column_name="context"
 num_train_epochs=10
 
+# pip install -r requirements.txt
+
+
 # # mlm-1: no pre-training
 # python run_mlm.py \
 #     --model_name_or_path bert-base-uncased \
