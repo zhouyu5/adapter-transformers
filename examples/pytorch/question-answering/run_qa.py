@@ -47,7 +47,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions
-from torch.profiler import profile, record_function, ProfilerActivity
+import torch
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -614,6 +614,8 @@ def main():
         post_process_function=post_processing_function,
         compute_metrics=compute_metrics,
     )
+    
+    profile_model(model, train_dataset, data_collator, training_args)
 
     # Training
     if training_args.do_train:
@@ -623,10 +625,6 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        # with profile(activities=[
-        #     ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
-        #     train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
@@ -682,6 +680,60 @@ def main():
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
+
+
+def profile_model(model, train_dataset, data_collator, args):
+    from transformers import get_scheduler
+    from torch.utils.data import DataLoader
+
+    model.train()
+
+    train_dataloader = DataLoader(
+        train_dataset, shuffle=True, batch_size=args.per_device_train_batch_size, collate_fn=data_collator
+    )
+
+    # Optimizer
+    # Split weights in two groups, one with weight decay and the other not.
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=args.num_train_epochs * len(train_dataloader),
+    )
+
+    # torch.profiler.ProfilerActivity.CUDA
+    # profile_memory=True,
+    with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], 
+                            schedule=torch.profiler.schedule(skip_first=3, wait=1, warmup=1, active=2, repeat=2),
+                            on_trace_ready=torch.profiler.tensorboard_trace_handler('hf-training-torch')
+    ) as prof:
+
+        for batch in train_dataloader:
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
+            prof.step()
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    
+    sys.exit(0)
 
 
 if __name__ == "__main__":
