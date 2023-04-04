@@ -4,12 +4,13 @@ num_train_epochs=1
 
 
 # direct fine-tuning profiling
+# --no_cuda \
+# --fp16
 python run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
   --do_train \
   --do_eval \
-  --fp16 \
   --per_device_train_batch_size 12 \
   --learning_rate 3e-5 \
   --num_train_epochs $num_train_epochs \

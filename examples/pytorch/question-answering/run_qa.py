@@ -600,7 +600,7 @@ def main():
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     # Setup adapters
-    setup_adapter_training(model, adapter_args, training_args, data_args.dataset_name or "squad")
+    setup_adapter_training(model, adapter_args, data_args.dataset_name or "squad")
     # Initialize our Trainer
     trainer_class = QuestionAnsweringAdapterTrainer if adapter_args.train_adapter else QuestionAnsweringTrainer
     trainer = trainer_class(
@@ -686,6 +686,8 @@ def profile_model(model, train_dataset, data_collator, args):
     from transformers import get_scheduler
     from torch.utils.data import DataLoader
 
+    saving_dir_name = 'hf-training-torch/adapter'
+
     model.train()
 
     train_dataloader = DataLoader(
@@ -718,7 +720,7 @@ def profile_model(model, train_dataset, data_collator, args):
     # profile_memory=True,
     with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], 
                             schedule=torch.profiler.schedule(skip_first=3, wait=1, warmup=1, active=2, repeat=2),
-                            on_trace_ready=torch.profiler.tensorboard_trace_handler('hf-training-torch')
+                            on_trace_ready=torch.profiler.tensorboard_trace_handler(saving_dir_name)
     ) as prof:
 
         for batch in train_dataloader:
@@ -731,7 +733,7 @@ def profile_model(model, train_dataset, data_collator, args):
             lr_scheduler.step()
             optimizer.zero_grad()
             prof.step()
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     
     sys.exit(0)
 
