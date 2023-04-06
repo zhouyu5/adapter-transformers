@@ -6,9 +6,29 @@ num_train_epochs=1
 # direct fine-tuning profiling
 # --no_cuda \
 # --fp16
+# python run_qa.py \
+#   --model_name_or_path bert-base-uncased \
+#   --dataset_name squad \
+#   --do_train \
+#   --do_eval \
+#   --per_device_train_batch_size 12 \
+#   --learning_rate 3e-5 \
+#   --num_train_epochs $num_train_epochs \
+#   --max_seq_length 384 \
+#   --doc_stride 128 \
+#   --max_train_samples 500 \
+#   --max_eval_samples 500 \
+#   --overwrite_output_dir \
+#   --output_dir tmp/direct_ft1
+
+
+# new adapter base profiling
+# --fp16 \
 python run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
+  --train_adapter \
+  --adapter_config houlsby \
   --do_train \
   --do_eval \
   --per_device_train_batch_size 12 \
@@ -16,10 +36,10 @@ python run_qa.py \
   --num_train_epochs $num_train_epochs \
   --max_seq_length 384 \
   --doc_stride 128 \
-  --max_train_samples 100 \
-  --max_eval_samples 100 \
+  --max_train_samples 500 \
+  --max_eval_samples 500 \
   --overwrite_output_dir \
-  --output_dir tmp/direct_ft1
+  --output_dir tmp/adapter1
 
 
 
