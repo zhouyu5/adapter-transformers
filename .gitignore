@@ -148,6 +148,7 @@ runs
 # data
 /data
 serialization_dir
+*.json
 
 # emacs
 *.*~

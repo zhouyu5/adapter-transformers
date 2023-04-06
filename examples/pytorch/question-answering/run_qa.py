@@ -718,21 +718,23 @@ def profile_model(model, train_dataset, data_collator, args):
 
     # torch.profiler.ProfilerActivity.CUDA
     # profile_memory=True,
+    # schedule=torch.profiler.schedule(skip_first=3, wait=1, warmup=1, active=2, repeat=2),
     with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], 
-                            schedule=torch.profiler.schedule(skip_first=3, wait=1, warmup=1, active=2, repeat=2),
                             on_trace_ready=torch.profiler.tensorboard_trace_handler(saving_dir_name)
     ) as prof:
+        with torch.profiler.record_function("model_all"):
 
-        for batch in train_dataloader:
-            batch = {k: v.to(args.device) for k, v in batch.items()}
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss.backward()
+            for batch in train_dataloader:
+                batch = {k: v.to(args.device) for k, v in batch.items()}
+                with torch.profiler.record_function("model_inference"):
+                    outputs = model(**batch)
+                loss = outputs.loss
+                loss.backward()
 
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-            prof.step()
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                prof.step()
     print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     
     sys.exit(0)
